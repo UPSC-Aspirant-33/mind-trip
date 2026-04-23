@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mind Trip 🌍</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{height:100vh;background:#0f2027;font-family:'Segoe UI',sans-serif;color:#fff;display:flex;flex-direction:column;overflow:hidden;}
+header{padding:14px 20px;background:rgba(0,0,0,0.5);backdrop-filter:blur(16px);border-bottom:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:space-between;z-index:100;flex-shrink:0;}
+.header-left h1{font-size:1.3rem;background:linear-gradient(90deg,#00ffd5,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.header-left p{font-size:0.75rem;opacity:0.5;margin-top:2px;}
+.trip-count{font-size:0.8rem;opacity:0.6;padding:4px 12px;background:rgba(255,255,255,0.07);border-radius:12px;}
+#map{flex:1;z-index:1;}
+/* Leaflet popup overrides */
+.leaflet-popup-content-wrapper{background:rgba(15,32,39,0.95)!important;border:1px solid rgba(0,255,213,0.3)!important;border-radius:18px!important;backdrop-filter:blur(20px);box-shadow:0 8px 40px rgba(0,0,0,0.5)!important;}
+.leaflet-popup-content{color:#fff!important;margin:16px!important;}
+.leaflet-popup-tip{background:rgba(15,32,39,0.95)!important;}
+.popup-title{font-size:1.1rem;font-weight:700;margin-bottom:6px;color:#00ffd5;}
+.popup-desc{font-size:0.85rem;opacity:0.8;line-height:1.5;margin-bottom:12px;}
+.popup-visit{background:linear-gradient(135deg,#00ffd5,#0ea5e9);border:none;color:#0d1b2a;padding:8px 18px;border-radius:12px;font-size:0.85rem;font-weight:700;cursor:pointer;width:100%;transition:all 0.3s;}
+.popup-visit:hover{transform:scale(1.03);}
+/* Visualization overlay */
+.viz-overlay{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.85);display:none;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
+.viz-overlay.open{display:flex;}
+canvas#vizCanvas{border-radius:20px;}
+.viz-text{max-width:480px;text-align:center;padding:0 20px;}
+.viz-title{font-size:1.6rem;font-weight:700;background:linear-gradient(90deg,#00ffd5,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px;}
+.viz-desc{font-size:0.95rem;opacity:0.8;line-height:1.7;}
+.viz-close{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:10px 24px;border-radius:20px;cursor:pointer;transition:all 0.3s;font-size:0.9rem;}
+.viz-close:hover{background:rgba(255,255,255,0.2);}
+</style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <h1>🌍 Mind Trip</h1>
+    <p>Click any city for a mental vacation</p>
+    <p>This is not meat my expectation</p>
+  </div>
+  <div class="trip-count">🗺️ <span id="tripCount">0</span> trips taken</div>
+</header>
+<div id="map"></div>
+<div class="viz-overlay" id="vizOverlay">
+  <canvas id="vizCanvas" width="320" height="200"></canvas>
+  <div class="viz-text">
+    <div class="viz-title" id="vizTitle"></div>
+    <div class="viz-desc" id="vizDesc"></div>
+  </div>
+  <button class="viz-close" onclick="closeViz()">← Back to Map</button>
+</div>
+<audio id="bgMusic" loop></audio>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const locations=[
+  {name:"Bali 🌺",lat:-8.34,lng:115.09,desc:"Picture yourself on a sacred rice terrace as warm mist rolls through towering palms. Gamelan music drifts from a distant temple. Incense lingers in the air. Time softens, slows, and gently lets you breathe again.",color:"#f97316",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"},
+
+  {name:"Kyoto 🍁",lat:35.01,lng:135.76,desc:"Moss-covered stone paths wind beneath glowing red maple canopies. A bamboo grove whispers softly with the wind. Cherry blossoms fall like quiet snow, each petal carrying a moment of stillness.",color:"#ec4899",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"},
+
+  {name:"Maldives 🐚",lat:3.20,lng:73.22,desc:"Turquoise water stretches endlessly beneath a golden sky. You stand barefoot on a wooden pier as gentle waves kiss the shore. The world feels weightless, like nothing can reach you here.",color:"#06b6d4",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"},
+
+  {name:"Rishikesh 🕉️",lat:30.08,lng:78.27,desc:"The Ganges flows with ancient rhythm beneath a swaying bridge. Himalayan peaks rise quietly in the distance. Evening lamps float across the water, carrying prayers into the fading light.",color:"#f59e0b",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"},
+
+  {name:"Paris 🗼",lat:48.85,lng:2.35,desc:"You sit at a quiet café by the Seine, warm coffee in your hands. The morning light touches old stone buildings. Conversations hum softly around you as the city moves gently, unhurried.",color:"#8b5cf6",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3"},
+
+  {name:"New York 🗽",lat:40.71,lng:-74.00,desc:"From above, the city glows like a constellation. A million lights flicker beneath your feet. The energy is alive, yet in this moment, you feel perfectly still within the motion.",color:"#6366f1",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3"},
+
+  {name:"London 🇬🇧",lat:51.50,lng:-0.12,desc:"Soft rain taps gently against cobblestone streets. The Thames flows quietly beside you. Street lamps glow warm through the mist, wrapping the city in a calm, timeless embrace.",color:"#60a5fa",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3"},
+
+  {name:"Tokyo 🌸",lat:35.68,lng:139.69,desc:"Neon lights shimmer alongside quiet temples. Cherry blossoms drift slowly in the night air. Somewhere between modern rhythm and ancient calm, you find perfect balance.",color:"#fb7185",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"},
+
+  {name:"Dubai 🏙️",lat:25.20,lng:55.27,desc:"Golden desert dunes stretch endlessly under a glowing sunset. The wind moves gently across the sand. In the distance, the skyline sparkles like a dream rising from silence.",color:"#fbbf24",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3"},
+
+  {name:"Sydney 🦘",lat:-33.86,lng:151.20,desc:"At sunrise, waves roll in soft golden rhythm. Surfers glide across the water. The ocean breeze carries warmth and quiet freedom into every breath you take.",color:"#10b981",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3"},
+
+  {name:"Vancouver 🏔️",lat:49.28,lng:-123.12,desc:"Snow-capped mountains reflect perfectly in still harbour waters. Pine trees stand tall and silent. A lone kayak drifts gently, echoing the calm of untouched nature.",color:"#14b8a6",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3"},
+
+  {name:"Zurich 🏔️",lat:47.37,lng:8.54,desc:"Lake Zurich mirrors the sky like glass. Church bells echo softly across the old town. The air smells of rain, leaves, and quiet peace.",color:"#a78bfa",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3"},
+
+  {name:"Berlin 🎨",lat:52.52,lng:13.40,desc:"Street art colors every wall with stories untold. Musicians play softly in hidden corners. The city breathes creativity, freedom, and quiet introspection.",color:"#f472b6",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-13.mp3"},
+
+  {name:"Chennai 🌊",lat:13.08,lng:80.27,desc:"Besant Nagar beach glows under a violet sky. Waves roll in steady rhythm. The scent of street food and ocean air blends into a comforting, familiar calm.",color:"#fb923c",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-14.mp3"},
+
+  {name:"Coimbatore 🌿",lat:11.01,lng:76.96,desc:"A gentle breeze flows down from the Western Ghats. Coconut trees sway quietly. The air feels lighter here, like the city itself is breathing slowly with you.",color:"#22c55e",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-15.mp3"},
+
+  {name:"Madurai 🛕",lat:9.93,lng:78.12,desc:"Temple bells echo through ancient corridors. Lamps flicker against carved stone walls. A deep, timeless energy surrounds you, grounding every thought.",color:"#f43f5e",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-16.mp3"},
+
+  {name:"Kodaikanal 🌲",lat:10.23,lng:77.48,desc:"Fog drifts slowly through tall pine trees. A quiet lake reflects the grey sky. Footsteps soften on damp earth as the world fades into peaceful silence.",color:"#16a34a",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-17.mp3"},
+
+  {name:"Ooty 🍵",lat:11.41,lng:76.69,desc:"Rolling tea estates stretch endlessly in soft green waves. A toy train whistles in the distance. Cool mist wraps gently around you like a quiet embrace.",color:"#4ade80",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-18.mp3"},
+
+  {name:"Goa 🏖️",lat:15.29,lng:74.12,desc:"You lie beneath a coconut palm as waves move in slow rhythm. A distant guitar hums softly. Time loosens its grip, and nothing feels urgent anymore.",color:"#facc15",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-19.mp3"},
+
+  {name:"Mysuru 🏰",lat:12.29,lng:76.63,desc:"The palace glows warmly against the night sky. Sandalwood fragrance drifts in the air. The city feels royal, calm, and quietly majestic.",color:"#c084fc",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-20.mp3"},
+
+  {name:"Udaipur 🪷",lat:24.57,lng:73.69,desc:"A palace floats gently on Lake Pichola. Lanterns flicker along marble steps. The sunset melts into shades of gold, rose, and deep violet.",color:"#f87171",music:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-21.mp3"}
+];
+
+const map=L.map('map',{zoomControl:true,attributionControl:false}).setView([20,78],3);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+
+let trips=+localStorage.getItem('mindtrip_count')||0;
+document.getElementById('tripCount').textContent=trips;
+
+locations.forEach(loc=>{
+  const icon=L.divIcon({html:`<div style="background:${loc.color}22;border:2px solid ${loc.color};border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:10px;box-shadow:0 0 12px ${loc.color}88;cursor:pointer;transition:all 0.3s"></div>`,className:'',iconSize:[22,22],iconAnchor:[11,11]});
+  const m=L.marker([loc.lat,loc.lng],{icon}).addTo(map);
+  m.bindPopup(`<div class="popup-title">${loc.name}</div><div class="popup-desc">${loc.desc.substring(0,100)}…</div><button class="popup-visit" onclick="visitPlace(${locations.indexOf(loc)})">✈️ Take me there</button>`);
+});
+
+function visitPlace(i){
+  const loc=locations[i];
+
+  // trip count
+  trips++;
+  localStorage.setItem('mindtrip_count',trips);
+  document.getElementById('tripCount').textContent=trips;
+
+  // UI update
+  document.getElementById('vizTitle').textContent=loc.name;
+  document.getElementById('vizDesc').textContent=loc.desc;
+  document.getElementById('vizOverlay').classList.add('open');
+
+  // 🎵 AUDIO FIX START
+  const music=document.getElementById("bgMusic");
+
+  if(loc.music){
+    music.pause();
+    music.src=loc.music;
+    music.load();
+
+    const playPromise = music.play();
+
+    if(playPromise !== undefined){
+      playPromise.catch(()=>{
+        console.log("Autoplay blocked, waiting for user interaction...");
+      });
+    }
+  }
+  // 🎵 AUDIO FIX END
+
+  // animation
+  startVizAnimation(loc.color);
+
+  map.closePopup();
+}
+
+let vizAnimId=null;
+function startVizAnimation(color){
+  const vc=document.getElementById('vizCanvas');
+  const vx=vc.getContext('2d');
+  if(vizAnimId)cancelAnimationFrame(vizAnimId);
+  let t=0;
+  function draw(){
+    vx.clearRect(0,0,320,200);
+    // animated gradient waves
+    for(let i=0;i<6;i++){
+      const y=100+Math.sin(t*0.03+i*0.8)*40;
+      const grad=vx.createLinearGradient(0,y-20,0,y+20);
+      grad.addColorStop(0,'transparent');
+      grad.addColorStop(0.5,color+'55');
+      grad.addColorStop(1,'transparent');
+      vx.beginPath();
+      for(let x=0;x<=320;x+=4){
+        const wy=y+Math.sin(t*0.02+x*0.03+i)*15;
+        x===0?vx.moveTo(x,wy):vx.lineTo(x,wy);
+      }
+      vx.strokeStyle=color+'88';vx.lineWidth=2;vx.stroke();
+    }
+    // floating orbs
+    for(let j=0;j<8;j++){
+      const ox=160+Math.cos(t*0.015+j*0.8)*100;
+      const oy=100+Math.sin(t*0.02+j*0.9)*60;
+      vx.beginPath();vx.arc(ox,oy,Math.abs(Math.sin(t*0.01+j))*8+2,0,Math.PI*2);
+      vx.fillStyle=color+'66';vx.shadowColor=color;vx.shadowBlur=15;vx.fill();vx.shadowBlur=0;
+    }
+    t++;vizAnimId=requestAnimationFrame(draw);
+  }
+  draw();
+}
+function closeViz(){
+  document.getElementById('vizOverlay').classList.remove('open');
+
+  // 🎵 STOP MUSIC
+  const music=document.getElementById("bgMusic");
+  if(music){
+    music.pause();
+    music.currentTime = 0; // reset
+  }
+
+  // stop animation
+  if(vizAnimId){
+    cancelAnimationFrame(vizAnimId);
+    vizAnimId=null;
+  }
+}
+document.body.addEventListener("click",()=>{
+  const music=document.getElementById("bgMusic");
+  if(music && music.src){
+    music.play().catch(()=>{});
+  }
+},{once:true});
+
+</script>
+</body>
+</html>
